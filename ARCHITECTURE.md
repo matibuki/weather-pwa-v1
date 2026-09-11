@@ -5,6 +5,8 @@ Guidelines for the Lublin weather dashboard (`index.html`). Update this file as 
 ## PWA
 
 - Installable via `manifest.webmanifest` (standalone, e-ink theme colors).
+- Tab strip is hidden; navigation is a **Źródła** drawer (hamburger) so Dashboard
+  can use the full viewport on mobile.
 - `sw.js` precaches the app shell; weather API responses are **network-only**
   (fresh forecasts). UMCS proxy path is network-first with a 503 JSON fallback.
 - Run: `python3 local-proxy.py` → open `http://127.0.0.1:8765/` → Install app

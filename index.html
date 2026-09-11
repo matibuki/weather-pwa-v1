@@ -18,16 +18,30 @@
 <body>
   <div class="wrap">
     <header>
-      <div>
+      <div class="header-text">
         <h1>Pogoda Lublin</h1>
         <div class="sub" id="status">Wczytywanie prognozy…</div>
       </div>
-      <button type="button" id="refresh">Odśwież</button>
+      <div class="header-actions">
+        <button type="button" id="refresh">Odśwież</button>
+        <button type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-drawer" title="Menu">
+          Źródła
+        </button>
+      </div>
     </header>
 
-    <nav class="tabs" id="tabs" aria-label="Zakładki"></nav>
+    <nav class="tabs visually-hidden" id="tabs" aria-hidden="true"></nav>
     <div id="panels"></div>
   </div>
+
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+  <aside class="nav-drawer" id="nav-drawer" hidden aria-label="Nawigacja">
+    <div class="nav-drawer-head">
+      <strong>Zakładki</strong>
+      <button type="button" id="nav-close" aria-label="Zamknij">Zamknij</button>
+    </div>
+    <nav class="nav-drawer-list" id="nav-drawer-list"></nav>
+  </aside>
 
   <script src="js/app.js" defer></script>
   <script>

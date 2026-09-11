@@ -1067,16 +1067,40 @@ const CITY = {
 
     let activeTab = "dashboard";
 
-    function buildTabs() {
-      const tabs = [
-        { id: "dashboard", name: "Dashboard" },
-        { id: "main", name: "Główna" },
-        ...SOURCES,
-        { id: "about", name: "About" },
+    function tabList() {
+      return [
+        { id: "dashboard", name: "Dashboard", group: "home" },
+        { id: "main", name: "Główna", group: "home" },
+        ...SOURCES.map((s) => ({ ...s, group: "sources" })),
+        { id: "about", name: "About", group: "meta" },
       ];
-      document.getElementById("tabs").innerHTML = tabs
-        .map((t) => `<button type="button" class="tab" data-tab="${t.id}"${t.tbd ? " disabled" : ""}>${t.name}${t.tbd ? " (wkrótce)" : ""}</button>`)
-        .join("");
+    }
+
+    function openNav() {
+      const drawer = document.getElementById("nav-drawer");
+      const backdrop = document.getElementById("nav-backdrop");
+      const toggle = document.getElementById("nav-toggle");
+      drawer.hidden = false;
+      backdrop.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeNav() {
+      const drawer = document.getElementById("nav-drawer");
+      const backdrop = document.getElementById("nav-backdrop");
+      const toggle = document.getElementById("nav-toggle");
+      drawer.hidden = true;
+      backdrop.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+    }
+
+    function buildTabs() {
+      const tabs = tabList();
+      // Keep legacy #tabs empty/hidden for compatibility
+      document.getElementById("tabs").innerHTML = "";
+
       document.getElementById("panels").innerHTML = tabs
         .map((t) => {
           if (t.tbd) return `<div class="panel" id="panel-${t.id}"><div class="placeholder">Miejsce na kolejne źródło. Zostanie dodane wkrótce.</div></div>`;
@@ -1087,16 +1111,36 @@ const CITY = {
         })
         .join("");
 
-      document.querySelectorAll(".tab").forEach((btn) => {
-        btn.addEventListener("click", () => setActiveTab(btn.dataset.tab));
+      const list = document.getElementById("nav-drawer-list");
+      const parts = [];
+      let lastGroup = null;
+      const groupLabel = { home: "Widoki", sources: "Źródła", meta: "Info" };
+      for (const t of tabs) {
+        if (t.group !== lastGroup) {
+          parts.push(`<div class="nav-sep">${groupLabel[t.group] || ""}</div>`);
+          lastGroup = t.group;
+        }
+        const label = `${t.name}${t.tbd ? " (wkrótce)" : ""}`;
+        parts.push(
+          `<button type="button" class="nav-item" data-tab="${t.id}"${t.tbd ? " disabled" : ""}>${label}</button>`
+        );
+      }
+      list.innerHTML = parts.join("");
+      list.querySelectorAll(".nav-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setActiveTab(btn.dataset.tab);
+          closeNav();
+        });
       });
+
       setActiveTab(activeTab);
     }
 
     function setActiveTab(id) {
       activeTab = id;
-      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === id));
+      document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === id));
       document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${id}`));
+      document.body.classList.toggle("view-dashboard", id === "dashboard");
     }
 
     async function load() {
@@ -1141,4 +1185,14 @@ const CITY = {
     }
 
     document.getElementById("refresh").addEventListener("click", load);
+    document.getElementById("nav-toggle").addEventListener("click", () => {
+      const open = document.getElementById("nav-toggle").getAttribute("aria-expanded") === "true";
+      if (open) closeNav();
+      else openNav();
+    });
+    document.getElementById("nav-close").addEventListener("click", closeNav);
+    document.getElementById("nav-backdrop").addEventListener("click", closeNav);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeNav();
+    });
     load();
