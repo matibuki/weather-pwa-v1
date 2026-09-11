@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Square Room Runner</title>
+  <style>
+    :root {
+      --room-bg: #1e2430;
+      --wall: #3a4557;
+      --floor: #262f3d;
+      --char: #ffcc4d;
+      --char-shadow: rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #12161f;
+      color: #e6ebf2;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    #game {
+      display: block;
+      background: var(--floor);
+      border: 6px solid var(--wall);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .hint {
+      font-size: 14px;
+      color: #93a1b5;
+    }
+
+    kbd {
+      background: #2b3444;
+      border: 1px solid #46536a;
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 1px 7px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Square Room Runner</h1>
+  <canvas id="game" width="480" height="480"></canvas>
+  <p class="hint">
+    Move with <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd>
+  </p>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    // Room / wall geometry
+    const WALL = 6; // matches the border, keeps character inside the floor
+    const ROOM = {
+      left: WALL,
+      right: canvas.width - WALL,
+      top: WALL,
+      bottom: canvas.height - WALL,
+    };
+
+    // Character state
+    const player = {
+      w: 46,
+      h: 84,
+      x: canvas.width / 2 - 23,
+      y: canvas.height - WALL - 84,
+      speed: 4,           // pixels per frame at 60fps
+      facing: 1,          // 1 = right, -1 = left
+    };
+
+    // Track which movement keys are currently held
+    const keys = { left: false, right: false };
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = true;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = true;
+      if (["ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = false;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = false;
+    });
+
+    function update(dt) {
+      let dir = 0;
+      if (keys.left) dir -= 1;
+      if (keys.right) dir += 1;
+
+      if (dir !== 0) {
+        player.facing = dir;
+        player.x += dir * player.speed * dt;
+      }
+
+      // Keep the character within the room walls
+      if (player.x < ROOM.left) player.x = ROOM.left;
+      if (player.x + player.w > ROOM.right) player.x = ROOM.right - player.w;
+    }
+
+    function drawCharacter() {
+      const { x, y, w, h, facing } = player;
+      const cx = x + w / 2;          // horizontal center
+
+      // Shadow under the feet
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.beginPath();
+      ctx.ellipse(cx, y + h + 4, w / 2 + 4, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw Vader facing left/right by mirroring horizontally around center
+      ctx.save();
+      ctx.translate(cx, 0);
+      ctx.scale(facing, 1);
+      ctx.translate(-cx, 0);
+
+      drawLightsaber(cx, y, w, h);
+      drawVader(cx, y, w, h);
+
+      ctx.restore();
+    }
+
+    function drawVader(cx, y, w, h) {
+      const helmetR = 15;
+      const headTop = y + 4;
+      const shoulderY = headTop + helmetR + 10;
+
+      // ---- Flowing cape (behind the body) ----
+      ctx.fillStyle = "#0b0b0d";
+      ctx.beginPath();
+      ctx.moveTo(cx - 16, shoulderY);
+      ctx.lineTo(cx - 24, y + h);
+      ctx.lineTo(cx + 24, y + h);
+      ctx.lineTo(cx + 16, shoulderY);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Body / robe ----
+      ctx.fillStyle = "#141417";
+      ctx.beginPath();
+      ctx.moveTo(cx - 18, shoulderY);
+      ctx.lineTo(cx - 20, y + h);
+      ctx.lineTo(cx + 20, y + h);
+      ctx.lineTo(cx + 18, shoulderY);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Shoulders / cape collar ----
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.moveTo(cx - 22, shoulderY + 6);
+      ctx.quadraticCurveTo(cx, shoulderY - 8, cx + 22, shoulderY + 6);
+      ctx.lineTo(cx + 16, shoulderY + 14);
+      ctx.quadraticCurveTo(cx, shoulderY + 4, cx - 16, shoulderY + 14);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Chest control box ----
+      ctx.fillStyle = "#1c1c22";
+      ctx.beginPath();
+      ctx.roundRect(cx - 12, shoulderY + 16, 24, 20, 3);
+      ctx.fill();
+      // buttons
+      const btns = [
+        ["#e23b3b", -7, 22], ["#3bce5a", 0, 22], ["#4b8bff", 7, 22],
+        ["#f2c744", -6, 30], ["#f2c744", 2, 30],
+      ];
+      for (const [color, dx, dy] of btns) {
+        ctx.fillStyle = color;
+        ctx.fillRect(cx + dx - 2, shoulderY + dy, 4, 4);
+      }
+      // belt
+      ctx.fillStyle = "#2a2a30";
+      ctx.fillRect(cx - 20, shoulderY + 40, 40, 8);
+      ctx.fillStyle = "#5a5a62";
+      ctx.fillRect(cx - 6, shoulderY + 41, 12, 6);
+
+      // ---- Helmet dome ----
+      ctx.fillStyle = "#1a1a1e";
+      ctx.beginPath();
+      ctx.arc(cx, headTop + helmetR, helmetR, Math.PI, 0);
+      ctx.lineTo(cx + helmetR, headTop + helmetR + 6);
+      ctx.lineTo(cx - helmetR, headTop + helmetR + 6);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Face mask ----
+      ctx.fillStyle = "#232327";
+      ctx.beginPath();
+      ctx.moveTo(cx - helmetR + 1, headTop + helmetR + 4);
+      ctx.lineTo(cx + helmetR - 1, headTop + helmetR + 4);
+      ctx.lineTo(cx + 9, headTop + helmetR + 16);
+      ctx.lineTo(cx + 5, headTop + helmetR + 24); // chin point of the mask
+      ctx.lineTo(cx - 5, headTop + helmetR + 24);
+      ctx.lineTo(cx - 9, headTop + helmetR + 16);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Eyes (angry lenses) ----
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.moveTo(cx - 11, headTop + helmetR + 6);
+      ctx.lineTo(cx - 3, headTop + helmetR + 8);
+      ctx.lineTo(cx - 4, headTop + helmetR + 13);
+      ctx.lineTo(cx - 10, headTop + helmetR + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx + 11, headTop + helmetR + 6);
+      ctx.lineTo(cx + 3, headTop + helmetR + 8);
+      ctx.lineTo(cx + 4, headTop + helmetR + 13);
+      ctx.lineTo(cx + 10, headTop + helmetR + 12);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- Breathing grille ----
+      ctx.fillStyle = "#000";
+      ctx.fillRect(cx - 5, headTop + helmetR + 18, 10, 5);
+      ctx.strokeStyle = "#4a4a52";
+      ctx.lineWidth = 1;
+      for (let i = -4; i <= 4; i += 2) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i, headTop + helmetR + 18);
+        ctx.lineTo(cx + i, headTop + helmetR + 23);
+        ctx.stroke();
+      }
+
+      // ---- Helmet highlight ----
+      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx - 3, headTop + helmetR, helmetR - 4, Math.PI * 1.1, Math.PI * 1.55);
+      ctx.stroke();
+    }
+
+    function drawLightsaber(cx, y, w, h) {
+      // Held out to the (facing) right side. Hilt near the hand, blade up.
+      const handX = cx + 22;
+      const handY = y + 54;
+
+      // ---- Hilt ----
+      ctx.save();
+      ctx.translate(handX, handY);
+      ctx.rotate(-0.35); // slight tilt
+      ctx.fillStyle = "#3a3a3e";
+      ctx.fillRect(-4, -2, 8, 22);
+      ctx.fillStyle = "#8a8a90";
+      ctx.fillRect(-4, 2, 8, 3);
+      ctx.fillStyle = "#151517";
+      ctx.fillRect(-4, 9, 8, 3);
+
+      // ---- Blade with glow ----
+      ctx.shadowColor = "#ff2b2b";
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = "#ff3b3b";
+      ctx.fillRect(-3, -78, 6, 82);
+      // hot white core
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = "#ffd0d0";
+      ctx.fillRect(-1.5, -76, 3, 78);
+      ctx.restore();
+
+      // ---- Gloved hand gripping the hilt ----
+      ctx.fillStyle = "#050505";
+      ctx.beginPath();
+      ctx.arc(handX, handY + 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function draw() {
+      // Floor
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue("--floor") || "#262f3d";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Simple floor grid for a sense of movement
+      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.lineWidth = 1;
+      for (let gx = ROOM.left; gx <= ROOM.right; gx += 40) {
+        ctx.beginPath();
+        ctx.moveTo(gx, ROOM.top);
+        ctx.lineTo(gx, ROOM.bottom);
+        ctx.stroke();
+      }
+      for (let gy = ROOM.top; gy <= ROOM.bottom; gy += 40) {
+        ctx.beginPath();
+        ctx.moveTo(ROOM.left, gy);
+        ctx.lineTo(ROOM.right, gy);
+        ctx.stroke();
+      }
+
+      drawCharacter();
+    }
+
+    // Game loop with delta-time normalized to 60fps
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - last) / (1000 / 60), 3); // cap to avoid jumps
+      last = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
