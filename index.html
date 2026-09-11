@@ -3,45 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#e4dfd2" />
-  <meta name="color-scheme" content="light" />
-  <meta name="description" content="Panel pogody dla Lublina — konsensus wielu źródeł, tryb e-ink." />
+  <meta name="theme-color" content="#161826" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Panel pogody dla Lublina — konsensus wielu źródeł prognoz i lokalnych pomiarów." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Pogoda Lublin" />
   <title>Pogoda Lublin</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="header-text">
+    <header class="topbar">
+      <div>
         <h1>Pogoda Lublin</h1>
         <div class="sub" id="status">Wczytywanie prognozy…</div>
       </div>
-      <div class="header-actions">
-        <button type="button" id="refresh">Odśwież</button>
-        <button type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-drawer" title="Menu">
-          Źródła
-        </button>
-      </div>
+      <button type="button" class="icon-btn" id="refresh" title="Odśwież" aria-label="Odśwież">↻</button>
     </header>
 
-    <nav class="tabs visually-hidden" id="tabs" aria-hidden="true"></nav>
     <div id="panels"></div>
   </div>
 
-  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
-  <aside class="nav-drawer" id="nav-drawer" hidden aria-label="Nawigacja">
-    <div class="nav-drawer-head">
-      <strong>Zakładki</strong>
-      <button type="button" id="nav-close" aria-label="Zamknij">Zamknij</button>
-    </div>
-    <nav class="nav-drawer-list" id="nav-drawer-list"></nav>
-  </aside>
+  <nav class="tabbar" id="tabbar" aria-label="Nawigacja">
+    <button type="button" class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button type="button" class="tab-btn" data-tab="main">Główna</button>
+    <button type="button" class="tab-btn" data-tab="sources">Źródła</button>
+    <button type="button" class="tab-btn" data-tab="about">Info</button>
+  </nav>
 
   <script src="js/app.js" defer></script>
   <script>

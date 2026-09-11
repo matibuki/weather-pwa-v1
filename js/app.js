@@ -719,14 +719,22 @@ const CITY = {
     }
 
     function daypartsHtml(slots, { compact = false, title = null } = {}) {
+      const viewingToday = daypartsDayKey() === warsawParts(new Date()).key;
+      const hourNow = warsawParts(new Date()).hour;
       const head = title ? `<div class="dayparts-title">${title}</div>` : "";
-      const cells = slots.map((s) => `
-        <div class="daypart">
+      const cells = slots.map((s) => {
+        let current = false;
+        if (viewingToday) {
+          if (s.id === "h1012") current = hourNow >= 10 && hourNow <= 12;
+          else current = Array.isArray(s.hours) && s.hours.includes(hourNow);
+        }
+        return `
+        <div class="daypart${current ? " current" : ""}">
           <div class="when">${s.label}</div>
           <div class="t">${fmt.temp(s.temp)}</div>
-        </div>`).join("");
-      const cls = compact ? "eink compact" : "eink";
-      return `<div class="${cls}">${head}<div class="dayparts${compact ? " compact" : ""}">${cells}</div></div>`;
+        </div>`;
+      }).join("");
+      return `<div class="dayparts-block">${head}<div class="dayparts${compact ? " compact" : ""}">${cells}</div></div>`;
     }
 
     function renderSourcePanel(src) {
@@ -751,6 +759,7 @@ const CITY = {
         : "";
 
       panel.innerHTML = `
+        <button type="button" class="back-link" id="back-to-sources">← Źródła</button>
         <section class="card source">
           <div class="source-head">
             <h2>${iconHtml(src.current, "1.4em")}${src.name} · ${CITY.name}</h2>
@@ -761,6 +770,9 @@ const CITY = {
         </section>
         ${daypartBlock}
         ${hourlySection}`;
+
+      const back = panel.querySelector("#back-to-sources");
+      if (back) back.addEventListener("click", () => setActiveTab("sources"));
 
       const now = panel.querySelector("tr.now");
       const wrap = panel.querySelector(".table-wrap");
@@ -937,9 +949,12 @@ const CITY = {
         return;
       }
       const now = new Date();
+      const withTemp = forecasts.filter((s) => Number.isFinite(s.current.temp));
       const avgTemp = meanFinite(forecasts.map((s) => s.current.temp));
+      const avgFeels = meanFinite(forecasts.map((s) => s.current.feels));
       const avgWind = meanFinite(forecasts.map((s) => s.current.windMs));
       const avgPress = meanFinite(forecasts.map((s) => s.current.pressurePa));
+      const avgHum = meanFinite(forecasts.map((s) => s.current.humidity));
       const avgPrecip = meanFinite(forecasts.map((s) => s.current.precip));
       const maxProbNow = (() => {
         const vals = forecasts.map((s) => s.current.precipProb).filter(Number.isFinite);
@@ -954,8 +969,40 @@ const CITY = {
         storm: forecasts.some((s) => s.current.storm),
         snow: forecasts.some((s) => s.current.snow) ? true : null,
       };
+      const icon = iconFor(consensus);
 
-      // rain hours table — upcoming wet hours only
+      let spreadHtml = "";
+      if (withTemp.length) {
+        const minS = withTemp.reduce((a, b) => (b.current.temp < a.current.temp ? b : a));
+        const maxS = withTemp.reduce((a, b) => (b.current.temp > a.current.temp ? b : a));
+        const minT = minS.current.temp;
+        const maxT = maxS.current.temp;
+        const span = Math.max(maxT - minT, 0.01);
+        const left = 0;
+        const width = 100;
+        const meanPct = Number.isFinite(avgTemp) ? ((avgTemp - minT) / span) * 100 : 50;
+        spreadHtml = `
+          <section class="card spread">
+            <h3 class="section-title">Rozrzut temperatur</h3>
+            <div class="spread-track">
+              <div class="spread-range" style="left:${left}%;width:${width}%"></div>
+              <div class="spread-mean" style="left:${meanPct}%"></div>
+            </div>
+            <div class="spread-labels">
+              <span>${fmt.temp(minT)}</span>
+              <span>${fmt.temp(avgTemp)}</span>
+              <span>${fmt.temp(maxT)}</span>
+            </div>
+            <div class="spread-hint">${minS.name} — ${maxS.name}</div>
+          </section>`;
+      }
+
+      const precipValue = Number.isFinite(avgPrecip)
+        ? `${fmt.mm(avgPrecip)}${Number.isFinite(maxProbNow) ? ` · ${fmt.pct(maxProbNow)}` : ""}`
+        : (Number.isFinite(maxProbNow) ? fmt.pct(maxProbNow) : "–");
+
+      const dayKey = daypartsDayKey();
+
       const hourMap = new Map();
       forecasts.forEach((s) => {
         (s.hourly || []).forEach((h) => {
@@ -978,46 +1025,110 @@ const CITY = {
         .slice(0, 8);
 
       const rainTableHtml = rainyHours.length
-        ? `<div class="dash-rain-table">
-            <div class="title">Nadchodzący opad</div>
-            <table>
-              <thead><tr><th>Godzina</th><th>mm</th><th>Prawd.</th></tr></thead>
-              <tbody>
-                ${rainyHours.map((r) => `<tr>
-                  <td>${fmt.hourOnly(r.time)}</td>
-                  <td>${fmt.mm(r.mm)}</td>
-                  <td>${fmt.pct(r.prob)}</td>
-                </tr>`).join("")}
-              </tbody>
-            </table>
-          </div>`
-        : `<div class="dash-rain-table"><div class="dash-rain-empty">Brak opadu</div></div>`;
+        ? `<section class="card">
+            <h3 class="section-title">Nadchodzący opad</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Godzina</th><th>mm</th><th>Prawd.</th></tr></thead>
+                <tbody>
+                  ${rainyHours.map((r) => `<tr>
+                    <td>${fmt.hourOnly(r.time)}</td>
+                    <td>${fmt.mm(r.mm)}</td>
+                    <td>${fmt.pct(r.prob)}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+          </section>`
+        : `<section class="card"><div class="placeholder">Brak opadu w najbliższych godzinach</div></section>`;
+
+      const feelsLine = Number.isFinite(avgFeels)
+        ? `Odczuwalna ${fmt.temp(avgFeels)}`
+        : "";
 
       panel.innerHTML = `
-        <div class="dash-wrap">
-          <div class="dash-widget">
-            <div class="dash-place">${CITY.name}</div>
-            <div class="dash-icon">${iconHtml(consensus, "1em") || "·"}</div>
-            <div class="dash-label">Średnia prognoz</div>
-            <div class="dash-temp">${fmt.temp(avgTemp)}</div>
-            <div class="dash-grid">
-              <div class="dash-cell">
-                <div class="k">Wiatr</div>
-                <div class="v">${fmt.wind(avgWind)}</div>
-              </div>
-              <div class="dash-cell">
-                <div class="k">Ciśnienie</div>
-                <div class="v">${fmt.hpa(avgPress)}</div>
-              </div>
-            </div>
-            ${daypartsHtml(consensusDayparts(forecasts, daypartsDayKey()), {
-              compact: true,
-              title: daypartsLabel(daypartsDayKey()),
-            })}
-            ${rainTableHtml}
-            <div class="dash-foot">${forecasts.length} prognoz · ${fmt.hourOnly(now)}</div>
-          </div>
-        </div>`;
+        <section class="card dash-hero">
+          <div class="wx" style="font-size:2rem">${icon.e || "·"}</div>
+          <div class="dash-temp">${fmt.temp(avgTemp)}</div>
+          <div class="dash-cond">${icon.label || "Konsensus prognoz"}${feelsLine ? ` · ${feelsLine}` : ""}</div>
+        </section>
+        ${spreadHtml}
+        <div class="metric-grid">
+          <div class="metric-tile"><span class="label">Wiatr</span><div class="value">${fmt.wind(avgWind)}</div></div>
+          <div class="metric-tile"><span class="label">Ciśnienie</span><div class="value">${fmt.hpa(avgPress)}</div></div>
+          <div class="metric-tile"><span class="label">Wilgotność</span><div class="value">${fmt.pct(avgHum)}</div></div>
+          <div class="metric-tile"><span class="label">Opad</span><div class="value">${precipValue}</div></div>
+        </div>
+        <section class="card">
+          ${daypartsHtml(consensusDayparts(forecasts, dayKey), {
+            title: daypartsLabel(dayKey),
+          })}
+        </section>
+        ${rainTableHtml}`;
+    }
+
+    function renderSourcesList() {
+      const panel = document.getElementById("panel-sources");
+      if (!panel) return;
+      const all = Object.values(loaded);
+      const forecasts = all.filter((s) => s.kind !== "observation");
+      const observations = all.filter((s) => s.kind === "observation");
+      const consensusTemp = meanFinite(forecasts.map((s) => s.current.temp));
+
+      const rowHtml = (s) => {
+        const t = s.current?.temp;
+        let delta = "";
+        if (s.kind !== "observation" && Number.isFinite(t) && Number.isFinite(consensusTemp)) {
+          const d = t - consensusTemp;
+          const cls = d > 0.05 ? "pos" : (d < -0.05 ? "neg" : "");
+          const sign = d > 0 ? "+" : "";
+          delta = `<span class="delta ${cls}">${sign}${d.toFixed(1)}°</span>`;
+        }
+        return `<button type="button" class="src-row" data-source="${s.id}">
+          <span class="src-name">${s.name}</span>
+          <span class="src-meta">
+            <span class="src-temp">${fmt.temp(t)}</span>
+            ${delta}
+          </span>
+        </button>`;
+      };
+
+      const om = forecasts.filter((s) => s.id.startsWith("om-"));
+      const otherFc = forecasts.filter((s) => !s.id.startsWith("om-"));
+
+      let fcHtml = otherFc.map(rowHtml).join("");
+      if (om.length) {
+        fcHtml += `
+          <button type="button" class="om-toggle" id="om-toggle" aria-expanded="false">
+            <span>Modele Open-Meteo (${om.length})</span>
+            <span class="chev">▸</span>
+          </button>
+          <div class="om-children" id="om-children">
+            ${om.map(rowHtml).join("")}
+          </div>`;
+      }
+
+      const obsHtml = observations.length
+        ? observations.map(rowHtml).join("")
+        : `<div class="placeholder">Brak pomiarów.</div>`;
+
+      panel.innerHTML = `
+        <h3 class="src-group-title">Prognozy</h3>
+        ${fcHtml || `<div class="placeholder">Brak prognoz.</div>`}
+        <h3 class="src-group-title">Pomiary</h3>
+        ${obsHtml}`;
+
+      panel.querySelectorAll(".src-row").forEach((btn) => {
+        btn.addEventListener("click", () => setActiveTab(btn.dataset.source));
+      });
+      const toggle = panel.querySelector("#om-toggle");
+      const children = panel.querySelector("#om-children");
+      if (toggle && children) {
+        toggle.addEventListener("click", () => {
+          const open = children.classList.toggle("open");
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+      }
     }
 
     function renderAbout() {
@@ -1036,9 +1147,10 @@ const CITY = {
             <p>Osobisty panel pogody dla Lublina. Zbiera kilka niezależnych prognoz i lokalnych
             pomiarów, liczy konsensus (średnia / min / max) i pokazuje różnice między źródłami.</p>
             <ul>
-              <li><strong>Dashboard</strong> — krótki „widget” na telefon: konsensus teraz i temperatury w ciągu dnia (≈7, 10–12, 15, 18, 21).</li>
-              <li><strong>Główna</strong> — porównanie prognoz, rozrzut, opad, temperatury w ciągu dnia, pomiary osobno.</li>
-              <li><strong>Karty źródeł</strong> — surowe dane z każdej usługi / modelu / stacji.</li>
+              <li><strong>Dashboard</strong> — konsensus teraz: temperatura, rozrzut, metryki i dayparty.</li>
+              <li><strong>Główna</strong> — porównanie prognoz, rozrzut, opad, pomiary osobno.</li>
+              <li><strong>Źródła</strong> — lista prognoz i pomiarów (Open-Meteo złożone); tap otwiera szczegóły.</li>
+              <li><strong>Info</strong> — ten opis, status źródeł i atrybucja.</li>
             </ul>
             ${issuesHtml}
             <p>Działa jako <strong>PWA</strong> (GitHub Pages lub <code>local-proxy.py</code>). Shell działa offline; świeże prognozy wymagają sieci. Bez konta, bez trackingu.</p>
@@ -1062,74 +1174,31 @@ const CITY = {
       return [
         { id: "dashboard", name: "Dashboard", group: "home" },
         { id: "main", name: "Główna", group: "home" },
+        { id: "sources", name: "Źródła", group: "home" },
         ...SOURCES.map((s) => ({ ...s, group: "sources" })),
-        { id: "about", name: "About", group: "meta" },
+        { id: "about", name: "Info", group: "meta" },
       ];
     }
 
-    function isNavOpen() {
-      return document.getElementById("nav-drawer").classList.contains("is-open");
-    }
-
-    function openNav() {
-      const drawer = document.getElementById("nav-drawer");
-      const backdrop = document.getElementById("nav-backdrop");
-      const toggle = document.getElementById("nav-toggle");
-      drawer.hidden = false;
-      backdrop.hidden = false;
-      drawer.classList.add("is-open");
-      backdrop.classList.add("is-open");
-      toggle.setAttribute("aria-expanded", "true");
-      document.body.style.overflow = "hidden";
-    }
-
-    function closeNav() {
-      const drawer = document.getElementById("nav-drawer");
-      const backdrop = document.getElementById("nav-backdrop");
-      const toggle = document.getElementById("nav-toggle");
-      drawer.classList.remove("is-open");
-      backdrop.classList.remove("is-open");
-      drawer.hidden = true;
-      backdrop.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      document.body.style.overflow = "";
+    function sourceIdSet() {
+      return new Set(SOURCES.map((s) => s.id));
     }
 
     function buildTabs() {
       const tabs = tabList();
-      // Keep legacy #tabs empty/hidden for compatibility
-      document.getElementById("tabs").innerHTML = "";
-
       document.getElementById("panels").innerHTML = tabs
         .map((t) => {
           if (t.tbd) return `<div class="panel" id="panel-${t.id}"><div class="placeholder">Miejsce na kolejne źródło. Zostanie dodane wkrótce.</div></div>`;
           if (t.id === "about") return `<div class="panel" id="panel-about"><div class="placeholder">…</div></div>`;
           if (t.id === "dashboard") return `<div class="panel" id="panel-dashboard"><div class="placeholder">Wczytywanie…</div></div>`;
           if (t.id === "main") return `<div class="panel" id="panel-main"><div class="placeholder">Wczytywanie…</div></div>`;
+          if (t.id === "sources") return `<div class="panel" id="panel-sources"><div class="placeholder">Wczytywanie…</div></div>`;
           return `<div class="panel" id="panel-${t.id}"><div class="placeholder">Wczytywanie…</div></div>`;
         })
         .join("");
 
-      const list = document.getElementById("nav-drawer-list");
-      const parts = [];
-      let lastGroup = null;
-      const groupLabel = { home: "Widoki", sources: "Źródła", meta: "Info" };
-      for (const t of tabs) {
-        if (t.group !== lastGroup) {
-          parts.push(`<div class="nav-sep">${groupLabel[t.group] || ""}</div>`);
-          lastGroup = t.group;
-        }
-        const label = `${t.name}${t.tbd ? " (wkrótce)" : ""}`;
-        parts.push(
-          `<button type="button" class="nav-item" data-tab="${t.id}"${t.tbd ? " disabled" : ""}>${label}</button>`
-        );
-      }
-      list.innerHTML = parts.join("");
-      list.querySelectorAll(".nav-item").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          setActiveTab(btn.dataset.tab);
-          closeNav();
-        });
+      document.querySelectorAll("#tabbar .tab-btn").forEach((btn) => {
+        btn.onclick = () => setActiveTab(btn.dataset.tab);
       });
 
       setActiveTab(activeTab);
@@ -1137,8 +1206,12 @@ const CITY = {
 
     function setActiveTab(id) {
       activeTab = id;
-      document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === id));
       document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${id}`));
+      const sources = sourceIdSet();
+      const tabHighlight = sources.has(id) ? "sources" : id;
+      document.querySelectorAll("#tabbar .tab-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === tabHighlight);
+      });
       document.body.classList.toggle("view-dashboard", id === "dashboard");
     }
 
@@ -1170,30 +1243,15 @@ const CITY = {
 
       renderDashboard();
       renderMain();
+      renderSourcesList();
       renderAbout();
 
       if (Object.keys(loaded).length) {
         status.textContent = CITY.name;
       } else {
-        status.textContent = "Brak danych — szczegóły w About";
+        status.textContent = "Brak danych — szczegóły w Info";
       }
     }
 
     document.getElementById("refresh").addEventListener("click", load);
-    document.getElementById("nav-toggle").addEventListener("click", () => {
-      if (isNavOpen()) closeNav();
-      else openNav();
-    });
-    document.getElementById("nav-close").addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      closeNav();
-    });
-    document.getElementById("nav-backdrop").addEventListener("click", (e) => {
-      e.preventDefault();
-      closeNav();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeNav();
-    });
     load();

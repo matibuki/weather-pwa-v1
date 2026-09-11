@@ -1,13 +1,13 @@
 {
   "name": "Pogoda Lublin",
   "short_name": "Pogoda LBL",
-  "description": "Konsensus prognoz i lokalnych pomiarów dla Lublina (e-ink).",
+  "description": "Konsensus prognoz i lokalnych pomiarów dla Lublina.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#e4dfd2",
-  "theme_color": "#e4dfd2",
+  "background_color": "#161826",
+  "theme_color": "#161826",
   "lang": "pl",
   "icons": [
     {

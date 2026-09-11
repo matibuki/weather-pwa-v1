@@ -1,5 +1,5 @@
 /* Pogoda Lublin PWA service worker */
-const CACHE = "pogoda-lublin-v5";
+const CACHE = "pogoda-lublin-v6";
 const PRECACHE = [
   "./",
   "./index.html",
