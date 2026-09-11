@@ -2,6 +2,14 @@
 
 Guidelines for the Lublin weather dashboard (`index.html`). Update this file as decisions are made.
 
+## PWA
+
+- Installable via `manifest.webmanifest` (standalone, e-ink theme colors).
+- `sw.js` precaches the app shell; weather API responses are **network-only**
+  (fresh forecasts). UMCS proxy path is network-first with a 503 JSON fallback.
+- Run: `python3 local-proxy.py` → open `http://127.0.0.1:8765/` → Install app
+  in the browser if offered.
+
 ## Visual theme
 
 - Full UI uses a Kindle-like **e-ink** look: warm paper background, grayscale
@@ -15,10 +23,14 @@ spread) per metric, and lists the details for the current time.
 
 ## Structure
 
-- Single self-contained `index.html` (HTML + CSS + vanilla JS, no build step, no
-  dependencies). It must keep working when opened directly via `file://`.
-  Optional `local-proxy.py` serves the same files over `http://127.0.0.1:8765/` and
-  CORS-proxies UMCS station JSON (required for UMCS tabs).
+- **PWA** (no build step, no bundler deps):
+  - `index.html` — app shell + SW registration
+  - `css/app.css` — e-ink theme
+  - `js/app.js` — sources, consensus, tabs
+  - `manifest.webmanifest`, `sw.js`, `icons/` — installability + offline shell
+  - `local-proxy.py` — **required** for PWA features and UMCS: serves the app at
+    `http://127.0.0.1:8765/` and CORS-proxies UMCS JSON. Service workers do not
+    register on `file://`; open via the proxy (or any http localhost server).
 - **Tabbed layout:**
   - `Dashboard` (landing) — compact phone-widget summary: consensus icon, average
     temperature, rain chance now/today, wind, pressure, and daypart temps
@@ -55,9 +67,10 @@ spread) per metric, and lists the details for the current time.
 
 ### Source eligibility (hard constraints)
 
-A source must be **free, CORS-open, and callable from `file://`** so the single
-static file keeps working. Prefer **keyless** sources. Vet new sources against
-this before adding.
+A source must be **free, CORS-open, and callable from the browser** (same rules
+as when the app ran from `file://`). Prefer **keyless** sources. Vet new sources
+against this before adding. The installed PWA still calls APIs from the client;
+`local-proxy.py` is only required for UMCS + serving the shell.
 
 **Exceptions:**
 - **UMCS** — origin API has no CORS; allowed only via `local-proxy.py`.

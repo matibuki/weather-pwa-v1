@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Tiny local static + CORS proxy for the Lublin weather dashboard.
+"""Local static server + CORS proxy for the Lublin weather PWA.
 
-Why: pogoda.umcs.pl/api/stations/{id} has no Access-Control-Allow-Origin, so a
-file:// (or even http://localhost) page cannot fetch it directly. This process:
-  1) serves an allowlisted set of dashboard files from this directory
+Why: pogoda.umcs.pl/api/stations/{id} has no Access-Control-Allow-Origin, so the
+app cannot fetch it directly. Service workers also need http(s):// (not file://).
+This process:
+  1) serves the PWA shell (HTML/CSS/JS/manifest/icons/sw) from this directory
   2) proxies UMCS station JSON under /umcs/stations/<id> with CORS *
 
 Usage:
@@ -16,6 +17,7 @@ Env:
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import sys
 import urllib.error
@@ -29,13 +31,23 @@ PORT = int(os.environ.get("PORT", "8765"))
 UMCS_UPSTREAM = "https://pogoda.umcs.pl/api/stations/{id}"
 UA = "lublin-dashboard-local-proxy/1.0 (+personal; contact: local)"
 
-# Only these files are served as static content (no .git, no arbitrary paths).
+# Explicit allowlist — no .git, no arbitrary path traversal.
 STATIC_ALLOWLIST = {
     "index.html",
     "game.html",
     "ARCHITECTURE.md",
     "AGENTS.md",
+    "manifest.webmanifest",
+    "sw.js",
+    "css/app.css",
+    "js/app.js",
+    "icons/icon.svg",
+    "icons/icon-192.png",
+    "icons/icon-512.png",
 }
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -46,7 +58,6 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
-        self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -62,13 +73,31 @@ class Handler(SimpleHTTPRequestHandler):
 
         if path in ("/", "/index.html"):
             self.path = "/index.html"
-            return super().do_GET()
+            return self._send_static("index.html", cache="no-cache")
 
         rel = path.lstrip("/")
         if rel in STATIC_ALLOWLIST and (ROOT / rel).is_file():
-            return super().do_GET()
+            # SW must be network-fresh; shell assets can be revalidated.
+            if rel == "sw.js":
+                return self._send_static(rel, cache="no-cache")
+            if rel.endswith((".html", ".webmanifest")):
+                return self._send_static(rel, cache="no-cache")
+            return self._send_static(rel, cache="public, max-age=3600")
 
         self.send_error(404, "Not found")
+
+    def _send_static(self, rel: str, cache: str):
+        file_path = ROOT / rel
+        data = file_path.read_bytes()
+        ctype = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        if rel.endswith(".webmanifest"):
+            ctype = "application/manifest+json"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", cache)
+        self.end_headers()
+        self.wfile.write(data)
 
     def _proxy_umcs(self, path: str):
         sid = path.rstrip("/").split("/")[-1]
@@ -80,40 +109,41 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
                 body = resp.read()
+                status = resp.status
                 ctype = resp.headers.get("Content-Type", "application/json")
         except urllib.error.HTTPError as e:
-            body = e.read() or str(e).encode()
-            self.send_response(e.code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(body if body.startswith(b"{") else json.dumps({"error": str(e)}).encode())
-            return
+            body = e.read() if e.fp else b"{}"
+            status = e.code
+            ctype = "application/json"
         except Exception as e:
+            payload = json.dumps({"error": str(e)}).encode()
             self.send_response(502)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(json.dumps({"error": f"UMCS proxy failed: {e}"}).encode())
+            self.wfile.write(payload)
             return
 
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
+        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
 def main():
-    httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Lublin dashboard proxy on http://127.0.0.1:{PORT}/")
-    print(f"  dashboard: http://127.0.0.1:{PORT}/")
-    print(f"  UMCS proxy: http://127.0.0.1:{PORT}/umcs/stations/16")
-    print("Ctrl+C to stop.")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"PWA + UMCS proxy at http://127.0.0.1:{PORT}/", flush=True)
+    print("Allowlisted static files:", ", ".join(sorted(STATIC_ALLOWLIST)), flush=True)
     try:
-        httpd.serve_forever()
+        server.serve_forever()
     except KeyboardInterrupt:
-        print("\nbye")
+        print("\nbye", flush=True)
 
 
 if __name__ == "__main__":
