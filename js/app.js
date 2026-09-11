@@ -598,6 +598,7 @@ const CITY = {
 
     const loaded = {};
     let loadGen = 0;
+    let lastLoadIssues = [];
 
     function iconFor(c) {
       if (!c) return { e: "", label: "" };
@@ -954,23 +955,7 @@ const CITY = {
         snow: forecasts.some((s) => s.current.snow) ? true : null,
       };
 
-      // today max rain chance from hourly
-      let todayMaxProb = null;
-      forecasts.forEach((s) => {
-        (s.hourly || []).forEach((h) => {
-          if (!isSameWarsawDay(h.time, now)) return;
-          if (Number.isFinite(h.precipProb)) {
-            todayMaxProb = todayMaxProb == null ? h.precipProb : Math.max(todayMaxProb, h.precipProb);
-          }
-        });
-      });
-
-      const raining = Number.isFinite(avgPrecip) && avgPrecip > 0.05;
-      const rainLine = raining
-        ? `<strong>Pada</strong> · teraz śr. ${fmt.mm(avgPrecip)}/h${maxProbNow != null ? ` · prawd. ${fmt.pct(maxProbNow)}` : ""}`
-        : `Bez opadu teraz${todayMaxProb != null ? ` · dziś maks. prawd. ${fmt.pct(todayMaxProb)}` : ""}`;
-
-      // rain hours table — consensus: hour has rain if any forecast has precip>0.05 or avg precip
+      // rain hours table — upcoming wet hours only
       const hourMap = new Map();
       forecasts.forEach((s) => {
         (s.hourly || []).forEach((h) => {
@@ -990,7 +975,7 @@ const CITY = {
         }))
         .filter((b) => (Number.isFinite(b.mm) && b.mm > 0.05) || (Number.isFinite(b.prob) && b.prob >= 50))
         .sort((a, b) => a.time - b.time)
-        .slice(0, 8);
+        .slice(0, 4);
 
       const rainTableHtml = rainyHours.length
         ? `<div class="dash-rain-table">
@@ -1015,7 +1000,6 @@ const CITY = {
             <div class="dash-icon">${iconHtml(consensus, "1em") || "·"}</div>
             <div class="dash-label">Średnia prognoz</div>
             <div class="dash-temp">${fmt.temp(avgTemp)}</div>
-            <div class="dash-rain">${rainLine}</div>
             <div class="dash-grid">
               <div class="dash-cell">
                 <div class="k">Wiatr</div>
@@ -1031,7 +1015,7 @@ const CITY = {
               title: daypartsLabel(daypartsDayKey()),
             })}
             ${rainTableHtml}
-            <div class="dash-foot">średnia ${forecasts.length} prognoz · ${fmt.stamp(now)}</div>
+            <div class="dash-foot">${forecasts.length} prognoz · ${fmt.hourOnly(now)}</div>
           </div>
         </div>`;
     }
@@ -1039,6 +1023,12 @@ const CITY = {
     function renderAbout() {
       const panel = document.getElementById("panel-about");
       if (!panel) return;
+      const issuesHtml = lastLoadIssues.length
+        ? `<h3>Status źródeł</h3>
+            <ul class="about-issues">
+              ${lastLoadIssues.map((m) => `<li>${m}</li>`).join("")}
+            </ul>`
+        : `<h3>Status źródeł</h3><p>Wszystkie źródła wczytane poprawnie (lub jeszcze nie odświeżono).</p>`;
       panel.innerHTML = `
         <div class="about">
           <section class="card">
@@ -1050,7 +1040,8 @@ const CITY = {
               <li><strong>Główna</strong> — porównanie prognoz, rozrzut, opad, temperatury w ciągu dnia, pomiary osobno.</li>
               <li><strong>Karty źródeł</strong> — surowe dane z każdej usługi / modelu / stacji.</li>
             </ul>
-            <p>Działa jako <strong>PWA</strong> przez <code>local-proxy.py</code> (<code>http://127.0.0.1:8765/</code>) — można zainstalować w przeglądarce. Shell działa offline; świeże prognozy wymagają sieci. Bez konta, bez trackingu.</p>
+            ${issuesHtml}
+            <p>Działa jako <strong>PWA</strong> (GitHub Pages lub <code>local-proxy.py</code>). Shell działa offline; świeże prognozy wymagają sieci. Bez konta, bez trackingu.</p>
             <h3>Źródła i atrybucja</h3>
             <ul>
               <li>ICM UW — meteorogram UM (meteo.pl / devmgramapi)</li>
@@ -1159,8 +1150,9 @@ const CITY = {
       buildTabs();
       renderAbout();
 
+      const sources = SOURCES.filter((s) => !s.tbd);
       const results = await Promise.allSettled(
-        SOURCES.filter((s) => !s.tbd).map(async (s) => {
+        sources.map(async (s) => {
           const data = await s.load();
           if (gen !== loadGen) return s.id;
           loaded[s.id] = { ...data, id: s.id, name: s.name, kind: s.kind || data.kind };
@@ -1170,25 +1162,20 @@ const CITY = {
       );
       if (gen !== loadGen) return;
 
+      lastLoadIssues = results
+        .map((r, i) => (r.status === "rejected"
+          ? `${sources[i].name}: ${r.reason?.message || "błąd"}`
+          : null))
+        .filter(Boolean);
+
       renderDashboard();
       renderMain();
       renderAbout();
 
-      const failed = results.filter((r) => r.status === "rejected");
       if (Object.keys(loaded).length) {
-        status.textContent = `${CITY.name} · ${CITY.lat.toFixed(4)}N, ${CITY.lon.toFixed(4)}E`;
-        if (failed.length) {
-          const span = document.createElement("span");
-          span.className = "error";
-          span.textContent = ` (część źródeł niedostępna: ${failed[0].reason?.message || "błąd"})`;
-          status.appendChild(span);
-        }
+        status.textContent = CITY.name;
       } else {
-        status.textContent = "";
-        const span = document.createElement("span");
-        span.className = "error";
-        span.textContent = `Nie udało się wczytać danych: ${failed[0]?.reason?.message || "błąd"}`;
-        status.appendChild(span);
+        status.textContent = "Brak danych — szczegóły w About";
       }
     }
 
