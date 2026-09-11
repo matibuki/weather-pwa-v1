@@ -1076,12 +1076,18 @@ const CITY = {
       ];
     }
 
+    function isNavOpen() {
+      return document.getElementById("nav-drawer").classList.contains("is-open");
+    }
+
     function openNav() {
       const drawer = document.getElementById("nav-drawer");
       const backdrop = document.getElementById("nav-backdrop");
       const toggle = document.getElementById("nav-toggle");
       drawer.hidden = false;
       backdrop.hidden = false;
+      drawer.classList.add("is-open");
+      backdrop.classList.add("is-open");
       toggle.setAttribute("aria-expanded", "true");
       document.body.style.overflow = "hidden";
     }
@@ -1090,6 +1096,8 @@ const CITY = {
       const drawer = document.getElementById("nav-drawer");
       const backdrop = document.getElementById("nav-backdrop");
       const toggle = document.getElementById("nav-toggle");
+      drawer.classList.remove("is-open");
+      backdrop.classList.remove("is-open");
       drawer.hidden = true;
       backdrop.hidden = true;
       toggle.setAttribute("aria-expanded", "false");
@@ -1186,12 +1194,18 @@ const CITY = {
 
     document.getElementById("refresh").addEventListener("click", load);
     document.getElementById("nav-toggle").addEventListener("click", () => {
-      const open = document.getElementById("nav-toggle").getAttribute("aria-expanded") === "true";
-      if (open) closeNav();
+      if (isNavOpen()) closeNav();
       else openNav();
     });
-    document.getElementById("nav-close").addEventListener("click", closeNav);
-    document.getElementById("nav-backdrop").addEventListener("click", closeNav);
+    document.getElementById("nav-close").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeNav();
+    });
+    document.getElementById("nav-backdrop").addEventListener("click", (e) => {
+      e.preventDefault();
+      closeNav();
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeNav();
     });
