@@ -975,7 +975,7 @@ const CITY = {
         }))
         .filter((b) => (Number.isFinite(b.mm) && b.mm > 0.05) || (Number.isFinite(b.prob) && b.prob >= 50))
         .sort((a, b) => a.time - b.time)
-        .slice(0, 4);
+        .slice(0, 8);
 
       const rainTableHtml = rainyHours.length
         ? `<div class="dash-rain-table">
